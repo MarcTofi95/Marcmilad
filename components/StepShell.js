@@ -22,7 +22,7 @@ function WaveIcon({ dim }) {
 // step of the client brief flow (contact/delivery/details/script/voice/
 // music/overview) — ports the sidebar behavior from every original
 // public/*.html page (applyReachableSteps) into one place.
-export default function StepShell({ briefId, current, brief, subtitle, bigNum, kicker, title, hint, children }) {
+export default function StepShell({ briefId, current, brief, subtitle, bigNum, kicker, title, hint, backHref, backLabel, children }) {
   const reached = computeReached(brief);
   const companyName = brief && brief.companyName && brief.companyName.trim() ? brief.companyName : null;
 
@@ -124,6 +124,13 @@ export default function StepShell({ briefId, current, brief, subtitle, bigNum, k
           </div>
         ) : null}
         <div style={{ position: 'relative', zIndex: 1 }}>
+          {backHref ? (
+            <div style={{ marginBottom: 18 }}>
+              <a href={backHref} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                ← {backLabel || 'Terug'}
+              </a>
+            </div>
+          ) : null}
           {kicker ? (
             <div style={{ fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#383209', fontWeight: 500 }}>{kicker}</div>
           ) : null}

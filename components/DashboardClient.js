@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 const RANGES = [
   { key: '7d', label: 'Laatste week' },
@@ -10,6 +10,17 @@ const RANGES = [
   { key: 'all', label: 'Alles' },
 ];
 const PAGE_SIZE = 8;
+
+// Producer-editable workflow status. Persisted server-side via
+// PATCH /api/dashboard/briefs/:id/status — replaces the old auto-derived
+// (submittedAt / selectedVoiceId-based) status guess.
+const STATUS_META = {
+  todo: { label: 'To-do', color: '#5C5850', bg: 'rgba(92,88,80,.1)' },
+  pending_customer: { label: 'Wacht op klant', color: '#8C6D1F', bg: 'rgba(230,200,88,.18)' },
+  in_progress: { label: 'In behandeling', color: '#1F6F8C', bg: 'rgba(88,170,230,.16)' },
+  done: { label: 'Klaar', color: '#1D7A46', bg: 'rgba(29,122,70,.12)' },
+};
+const STATUS_ORDER = ['todo', 'pending_customer', 'in_progress', 'done'];
 
 function rangeToMs(key) {
   const days = { '7d': 7, '30d': 30, '182d': 182, '365d': 365 }[key];
@@ -25,25 +36,79 @@ function parseSelectedTracks(brief) {
   }
 }
 
-function statusOf(brief) {
-  if (brief.submittedAt) return { label: 'Verzonden', color: '#1D7A46', bg: 'rgba(29,122,70,.12)' };
-  if (brief.selectedVoiceId || brief.generatedScript) return { label: 'In behandeling', color: '#8C6D1F', bg: 'rgba(230,200,88,.18)' };
-  return { label: 'Gestart', color: '#5C5850', bg: 'rgba(92,88,80,.1)' };
+function statusMetaOf(brief) {
+  return STATUS_META[brief.status] || STATUS_META.todo;
+}
+
+function StatusSelect({ brief, onChange, compact }) {
+  const meta = statusMetaOf(brief);
+  return (
+    <select
+      value={brief.status || 'todo'}
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => onChange(brief.id, e.target.value)}
+      style={{
+        fontSize: compact ? 11 : 12.5,
+        fontWeight: 600,
+        padding: compact ? '3px 8px' : '6px 10px',
+        borderRadius: 999,
+        color: meta.color,
+        background: meta.bg,
+        border: `1px solid ${meta.color}33`,
+        cursor: 'pointer',
+        appearance: 'none',
+        WebkitAppearance: 'none',
+      }}
+    >
+      {STATUS_ORDER.map((key) => (
+        <option key={key} value={key} style={{ color: '#1D1D1D', background: '#FFFFFF' }}>
+          {STATUS_META[key].label}
+        </option>
+      ))}
+    </select>
+  );
 }
 
 export default function DashboardClient({ briefs }) {
+  const [rows, setRows] = useState(briefs);
   const [range, setRange] = useState('30d');
   const [sortField, setSortField] = useState('updatedAt');
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
 
+  // Keep local editable copy in sync if the server-fetched prop ever changes
+  // (e.g. a fresh navigation to the dashboard).
+  useEffect(() => {
+    setRows(briefs);
+  }, [briefs]);
+
+  async function handleStatusChange(id, status) {
+    const prev = rows;
+    // Optimistic update — including inside the open detail overlay, if any.
+    setRows((cur) => cur.map((b) => (b.id === id ? { ...b, status } : b)));
+    setSelected((cur) => (cur && cur.id === id ? { ...cur, status } : cur));
+    try {
+      const res = await fetch(`/api/dashboard/briefs/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error('status update failed');
+    } catch (err) {
+      console.error(err);
+      // Roll back on failure.
+      setRows(prev);
+      setSelected((cur) => (cur && cur.id === id ? { ...cur, status: prev.find((b) => b.id === id)?.status } : cur));
+    }
+  }
+
   const filtered = useMemo(() => {
     const ms = rangeToMs(range);
-    if (!ms) return briefs;
+    if (!ms) return rows;
     const cutoff = Date.now() - ms;
-    return briefs.filter((b) => new Date(b.createdAt).getTime() >= cutoff);
-  }, [briefs, range]);
+    return rows.filter((b) => new Date(b.createdAt).getTime() >= cutoff);
+  }, [rows, range]);
 
   const sorted = useMemo(() => {
     const list = filtered.slice();
@@ -63,10 +128,11 @@ export default function DashboardClient({ briefs }) {
 
   const stats = useMemo(() => {
     const total = filtered.length;
-    const submitted = filtered.filter((b) => b.submittedAt).length;
-    const inProgress = filtered.filter((b) => !b.submittedAt && (b.selectedVoiceId || b.generatedScript)).length;
-    const started = total - submitted - inProgress;
-    return { total, submitted, inProgress, started };
+    const todo = filtered.filter((b) => (b.status || 'todo') === 'todo').length;
+    const pendingCustomer = filtered.filter((b) => b.status === 'pending_customer').length;
+    const inProgress = filtered.filter((b) => b.status === 'in_progress').length;
+    const done = filtered.filter((b) => b.status === 'done').length;
+    return { total, todo, pendingCustomer, inProgress, done };
   }, [filtered]);
 
   function toggleSort(field) {
@@ -99,22 +165,26 @@ export default function DashboardClient({ briefs }) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 26 }} className="tfa-stats-grid">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginBottom: 26 }} className="tfa-stats-grid">
         <div style={cardStyle}>
           <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>Totaal briefs</div>
           <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6 }}>{stats.total}</div>
         </div>
         <div style={cardStyle}>
-          <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>Verzonden</div>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6, color: '#1D7A46' }}>{stats.submitted}</div>
+          <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>To-do</div>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6 }}>{stats.todo}</div>
+        </div>
+        <div style={cardStyle}>
+          <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>Wacht op klant</div>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6, color: '#8C6D1F' }}>{stats.pendingCustomer}</div>
         </div>
         <div style={cardStyle}>
           <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>In behandeling</div>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6, color: '#8C6D1F' }}>{stats.inProgress}</div>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6, color: '#1F6F8C' }}>{stats.inProgress}</div>
         </div>
         <div style={cardStyle}>
-          <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>Gestart</div>
-          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6 }}>{stats.started}</div>
+          <div style={{ fontSize: 12, color: '#8C8880', textTransform: 'uppercase', letterSpacing: '.04em' }}>Klaar</div>
+          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 600, marginTop: 6, color: '#1D7A46' }}>{stats.done}</div>
         </div>
       </div>
 
@@ -140,21 +210,18 @@ export default function DashboardClient({ briefs }) {
               </tr>
             </thead>
             <tbody>
-              {pageItems.map((b) => {
-                const st = statusOf(b);
-                return (
-                  <tr key={b.id} onClick={() => setSelected(b)} style={{ borderBottom: '1px solid #F3F1EA', cursor: 'pointer' }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 600, color: b.companyName ? '#1D1D1D' : '#9C9890' }}>
-                      {b.companyName || 'Nog geen bedrijfsnaam'}
-                    </td>
-                    <td style={{ padding: '12px 16px' }}>{b.hoofdspotLength || '20'}″</td>
-                    <td style={{ padding: '12px 16px' }}>{new Date(b.updatedAt).toLocaleString('nl-NL')}</td>
-                    <td style={{ padding: '12px 16px' }}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999, color: st.color, background: st.bg }}>{st.label}</span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {pageItems.map((b) => (
+                <tr key={b.id} onClick={() => setSelected(b)} style={{ borderBottom: '1px solid #F3F1EA', cursor: 'pointer' }}>
+                  <td style={{ padding: '12px 16px', fontWeight: 600, color: b.companyName ? '#1D1D1D' : '#9C9890' }}>
+                    {b.companyName || 'Nog geen bedrijfsnaam'}
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>{b.hoofdspotLength || '20'}″</td>
+                  <td style={{ padding: '12px 16px' }}>{new Date(b.updatedAt).toLocaleString('nl-NL')}</td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <StatusSelect brief={b} onChange={handleStatusChange} compact />
+                  </td>
+                </tr>
+              ))}
               {pageItems.length === 0 && (
                 <tr>
                   <td colSpan={4} style={{ padding: '24px 16px', textAlign: 'center', color: '#8C8880' }}>Geen briefs in deze periode.</td>
@@ -203,7 +270,9 @@ export default function DashboardClient({ briefs }) {
                   );
                 })()}
               </div>
-              <div><b>Status:</b> {statusOf(selected).label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+                <b>Status:</b> <StatusSelect brief={selected} onChange={handleStatusChange} />
+              </div>
               <div><b>Aangemaakt:</b> {new Date(selected.createdAt).toLocaleString('nl-NL')}</div>
               {selected.submittedAt && <div><b>Verzonden:</b> {new Date(selected.submittedAt).toLocaleString('nl-NL')}</div>}
             </div>
@@ -220,7 +289,10 @@ export default function DashboardClient({ briefs }) {
       )}
 
       <style>{`
-        @media (max-width: 720px) {
+        @media (max-width: 900px) {
+          .tfa-stats-grid { grid-template-columns: repeat(3, 1fr) !important; }
+        }
+        @media (max-width: 560px) {
           .tfa-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
         }
       `}</style>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { useBrief } from '../../../../components/useBrief';
 import { MONTH_NAMES_LOWER } from '../../../../components/flowData';
 
@@ -37,6 +38,7 @@ function formatAirDate(brief) {
 export default function OverviewPage({ params }) {
   const { id } = params;
   const { brief, loading, patch } = useBrief(id);
+  const showLoader = useMinDelay(loading, 4000);
   const [consentChecked, setConsentChecked] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
@@ -44,7 +46,7 @@ export default function OverviewPage({ params }) {
     setConsentChecked(false);
   }, [id]);
 
-  if (loading) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   if (!brief) {
     return (
@@ -102,7 +104,7 @@ export default function OverviewPage({ params }) {
   const cardStyle = { background: '#FBF9EC', border: '1.5px solid #EAE3C4', borderLeft: '4px solid #E6C858', borderRadius: '4px 14px 14px 4px', padding: '22px 24px', marginBottom: 14 };
 
   return (
-    <StepShell briefId={id} current={7} brief={brief} bigNum="07" kicker="Jouw mandje" title="Alles op een rij" hint="Het script, de stem en de muziek die je hebt gekozen — dit is wat TFA gaat opnemen en produceren.">
+    <StepShell briefId={id} current={7} brief={brief} bigNum="07" kicker="Jouw mandje" title="Alles op een rij" hint="Het script, de stem en de muziek die je hebt gekozen — dit is wat TFA gaat opnemen en produceren." backHref={`/brief/${id}/music`} backLabel="Terug naar de muziek">
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 16px' }} className="tfa-overview-grid">
         <div style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -210,10 +212,6 @@ export default function OverviewPage({ params }) {
         <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} disabled={!briefReady || !consentChecked || submitting} onClick={submit}>
           Bevestigen en versturen naar TFA
         </button>
-      </div>
-
-      <div style={{ marginTop: 16 }}>
-        <a href={`/brief/${id}/music`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de muziek</a>
       </div>
 
       <style jsx>{`

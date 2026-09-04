@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { useBrief } from '../../../../components/useBrief';
 import { AGE_LABELS } from '../../../../components/flowData';
 
@@ -20,6 +21,7 @@ export default function VoicePage({ params }) {
   const { id } = params;
   const router = useRouter();
   const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
+  const showLoader = useMinDelay(loading, 4000);
   const [form, setForm] = useState({ voiceGender: '', voiceAgeRange: '', voiceStyleTags: [], voiceNote: '', selectedVoiceId: '' });
   const [phase, setPhase] = useState('questions');
   const [playingId, setPlayingId] = useState(null);
@@ -42,12 +44,34 @@ export default function VoicePage({ params }) {
     })();
     return () => {
       cancelled = true;
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      stopAudio();
     };
   }, []);
+
+  // Belt-and-braces audio stop: the unmount cleanup above already pauses
+  // playback on a normal client-side route change, but a browser back/forward
+  // navigation can be restored from bfcache without a fresh unmount, and a
+  // tab switch shouldn't keep a preview audibly playing either — so also
+  // stop on pagehide/visibilitychange.
+  useEffect(() => {
+    function handleHide() {
+      stopAudio();
+      setPlayingId(null);
+    }
+    window.addEventListener('pagehide', handleHide);
+    document.addEventListener('visibilitychange', handleHide);
+    return () => {
+      window.removeEventListener('pagehide', handleHide);
+      document.removeEventListener('visibilitychange', handleHide);
+    };
+  }, []);
+
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+  }
 
   const allTags = Array.from(new Set(voicePool.flatMap((v) => v.tags || []))).sort();
 
@@ -116,11 +140,11 @@ export default function VoicePage({ params }) {
   // still does *something* rather than silently failing.
   function playPreview(voice) {
     if (playingId === voice.id) {
-      if (audioRef.current) audioRef.current.pause();
+      stopAudio();
       setPlayingId(null);
       return;
     }
-    if (audioRef.current) audioRef.current.pause();
+    stopAudio();
     if (voice.audioUrl) {
       const audio = new Audio(voice.audioUrl);
       audioRef.current = audio;
@@ -141,12 +165,14 @@ export default function VoicePage({ params }) {
 
   async function next() {
     if (!form.selectedVoiceId) return;
+    stopAudio();
+    setPlayingId(null);
     flushPending();
     await patch({ ...form, voiceStyleTags: form.voiceStyleTags.join(',') });
     router.push(`/brief/${id}/music`);
   }
 
-  if (loading) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   if (!brief) {
     return (
@@ -159,7 +185,7 @@ export default function VoicePage({ params }) {
   }
 
   return (
-    <StepShell briefId={id} current={5} brief={brief} bigNum="05" kicker={phase === 'questions' ? 'Voor je voorstellen' : 'Onze voorstellen voor jou'} title={phase === 'questions' ? 'Welke stem past bij jou?' : 'Kies je stem'}>
+    <StepShell briefId={id} current={5} brief={brief} bigNum="05" kicker={phase === 'questions' ? 'Voor je voorstellen' : 'Onze voorstellen voor jou'} title={phase === 'questions' ? 'Welke stem past bij jou?' : 'Kies je stem'} backHref={`/brief/${id}/script`} backLabel="Terug naar je script">
       {phase === 'questions' ? (
         <>
           <p style={{ fontSize: 13.5, lineHeight: 1.55, color: '#5C5850', margin: '0 0 26px' }}>
@@ -239,7 +265,7 @@ export default function VoicePage({ params }) {
             </div>
           )}
           <div style={{ marginTop: 18 }}>
-            <a href="#" onClick={(e) => { e.preventDefault(); setPhase('questions'); }} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de vragen</a>
+            <a href="#" onClick={(e) => { e.preventDefault(); stopAudio(); setPlayingId(null); setPhase('questions'); }} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de vragen</a>
           </div>
           <div style={{ marginTop: 22, paddingTop: 22, borderTop: '1px solid #EAE7DE', display: 'flex', justifyContent: 'flex-end' }}>
             <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} disabled={!form.selectedVoiceId} onClick={next}>
@@ -249,9 +275,6 @@ export default function VoicePage({ params }) {
         </>
       )}
       <p style={{ marginTop: 26, fontSize: 11.5, color: '#8C8880', lineHeight: 1.5 }}>Twijfel je tussen twee stemmen? Je kunt je keuze altijd nog aanpassen voordat je alles verstuurt.</p>
-      <div style={{ marginTop: 14 }}>
-        <a href={`/brief/${id}/script`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar je script</a>
-      </div>
       <div style={{ fontSize: 11, color: '#8C8880', textAlign: 'center', marginTop: 10, height: 14 }}>{saveState}</div>
     </StepShell>
   );

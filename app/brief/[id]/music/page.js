@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { useBrief } from '../../../../components/useBrief';
 
 const MAX_TRACKS = 3;
@@ -18,6 +19,7 @@ export default function MusicPage({ params }) {
   const { id } = params;
   const router = useRouter();
   const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
+  const showLoader = useMinDelay(loading, 4000);
   const [selectedTracks, setSelectedTracks] = useState([]);
   const [openPlaylistId, setOpenPlaylistId] = useState(null);
   const [playingTrackId, setPlayingTrackId] = useState(null);
@@ -40,12 +42,32 @@ export default function MusicPage({ params }) {
     })();
     return () => {
       cancelled = true;
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
+      stopAudio();
     };
   }, []);
+
+  // Belt-and-braces audio stop — see the identical comment in voice/page.js:
+  // the unmount cleanup above covers a normal client-side route change, but
+  // not a bfcache-restored back/forward navigation or a tab switch.
+  useEffect(() => {
+    function handleHide() {
+      stopAudio();
+      setPlayingTrackId(null);
+    }
+    window.addEventListener('pagehide', handleHide);
+    document.addEventListener('visibilitychange', handleHide);
+    return () => {
+      window.removeEventListener('pagehide', handleHide);
+      document.removeEventListener('visibilitychange', handleHide);
+    };
+  }, []);
+
+  function stopAudio() {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+  }
 
   // Group the real track list into "playlists" by category — a category
   // with no tracks in it simply doesn't appear, rather than every one of
@@ -110,11 +132,11 @@ export default function MusicPage({ params }) {
   // for tracks the producer hasn't attached audio to yet.
   function playPreview(track) {
     if (playingTrackId === track.id) {
-      if (audioRef.current) audioRef.current.pause();
+      stopAudio();
       setPlayingTrackId(null);
       return;
     }
-    if (audioRef.current) audioRef.current.pause();
+    stopAudio();
     if (track.audioUrl) {
       const audio = new Audio(track.audioUrl);
       audioRef.current = audio;
@@ -129,12 +151,14 @@ export default function MusicPage({ params }) {
 
   async function next() {
     if (selectedTracks.length === 0) return;
+    stopAudio();
+    setPlayingTrackId(null);
     flushPending();
     await patch({ selectedTracks: JSON.stringify(selectedTracks) });
     router.push(`/brief/${id}/overview`);
   }
 
-  if (loading) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   if (!brief) {
     return (
@@ -150,7 +174,7 @@ export default function MusicPage({ params }) {
   const atLimit = selectedTracks.length >= MAX_TRACKS;
 
   return (
-    <StepShell briefId={id} current={6} brief={brief} bigNum="06" kicker="Onze voorstellen voor jou" title="Kies je muziek" hint={'TFA curateert deze playlists. Open een categorie, beluister een track en kies degene die het beste bij ' + name + ' past.'}>
+    <StepShell briefId={id} current={6} brief={brief} bigNum="06" kicker="Onze voorstellen voor jou" title="Kies je muziek" hint={'TFA curateert deze playlists. Open een categorie, beluister een track en kies degene die het beste bij ' + name + ' past.'} backHref={`/brief/${id}/voice`} backLabel="Terug naar de stem">
       <div className="box" style={{ border: '1px dashed #E6C858', fontSize: 12, color: '#383209', marginBottom: 20 }}>
         Je kunt tot <b>3 tracks</b> kiezen als favoriet. TFA combineert er uiteindelijk één met de gekozen stem tot je definitieve mix.
       </div>
@@ -223,9 +247,6 @@ export default function MusicPage({ params }) {
         </div>
       )}
 
-      <div style={{ marginTop: 22 }}>
-        <a href={`/brief/${id}/voice`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de stem</a>
-      </div>
       <div style={{ marginTop: 20, paddingTop: 22, borderTop: '1px solid #EAE7DE', display: 'flex', justifyContent: 'flex-end' }}>
         <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} disabled={selectedTracks.length === 0} onClick={next}>
           Bevestigen — verder naar het overzicht

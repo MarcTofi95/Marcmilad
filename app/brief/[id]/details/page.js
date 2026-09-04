@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { useBrief } from '../../../../components/useBrief';
 import { TONE_LABELS } from '../../../../components/flowData';
 
@@ -15,6 +16,7 @@ export default function DetailsPage({ params }) {
   const { id } = params;
   const router = useRouter();
   const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
+  const showLoader = useMinDelay(loading, 4000);
   const [form, setForm] = useState({
     disclaimerText: '', extraNote: '', product: '', audience: 'b2b', decisionMaker: '',
     audienceAgeInterests: '', usp: '', price: null, priceDetail: '', mainMessage: '',
@@ -86,10 +88,10 @@ export default function DetailsPage({ params }) {
     router.push(`/brief/${id}/script`);
   }
 
-  if (loading) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   return (
-    <StepShell briefId={id} current={3} brief={brief} bigNum="03" kicker="De inhoud" title="Jouw brief" hint="Nog een paar korte vragen over je commercial en je brief.">
+    <StepShell briefId={id} current={3} brief={brief} bigNum="03" kicker="De inhoud" title="Jouw brief" hint="Nog een paar korte vragen over je commercial en je brief." backHref={`/brief/${id}/delivery`} backLabel="Terug naar levering">
       <div style={{ marginBottom: 22 }}>
         <label className="field-label">Welk product of welke dienst wil je promoten?</label>
         <textarea style={{ minHeight: 64 }} value={form.product} placeholder="Waar gaat de commercial over?" onChange={(e) => update('product', e.target.value)} />
@@ -183,9 +185,6 @@ export default function DetailsPage({ params }) {
         <textarea style={{ minHeight: 56 }} value={form.extraNote} placeholder="Nog iets anders dat we moeten weten?" onChange={(e) => update('extraNote', e.target.value)} />
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        <a href={`/brief/${id}/delivery`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar levering</a>
-      </div>
 
       <div style={{ marginTop: 22, paddingTop: 22, borderTop: '1px solid #EAE7DE', display: 'flex', justifyContent: 'flex-end' }}>
         <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} onClick={submit} disabled={generating}>

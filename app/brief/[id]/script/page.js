@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { TONE_LABELS, estimateSeconds, wordCountOf } from '../../../../components/flowData';
 
 const DEFAULT_DISCLAIMER = 'Nog geen verplichte tekst ontvangen — deze verschijnt hier zodra ingevuld in de brief.';
@@ -21,6 +22,7 @@ export default function ScriptPage({ params }) {
   const [brief, setBrief] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
+  const showLoader = useMinDelay(!firstLoadDone, 4000);
   const [scriptText, setScriptText] = useState('');
   const [varText, setVarText] = useState('');
   const [variationDetail, setVariationDetail] = useState('');
@@ -185,11 +187,11 @@ export default function ScriptPage({ params }) {
     router.push(`/brief/${id}/voice`);
   }
 
-  if (!firstLoadDone) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   if (!brief) {
     return (
-      <StepShell briefId={id} current={4} brief={null} bigNum="04" kicker="Klaar voor je review" title="Jouw script">
+      <StepShell briefId={id} current={4} brief={null} bigNum="04" kicker="Klaar voor je review" title="Jouw script" backHref={`/brief/${id}/details`} backLabel="Terug naar de brief">
         <div style={{ background: '#FBF3F1', border: '1px solid #C2513F', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#C2513F' }}>
           Geen brief gevonden bij deze link.
         </div>
@@ -251,6 +253,8 @@ export default function ScriptPage({ params }) {
       kicker="Klaar voor je review"
       title="Jouw script"
       hint="Zo vertelt TFA jouw verhaal in je hoofdspot — volledig geschreven op basis van je brief."
+      backHref={`/brief/${id}/details`}
+      backLabel="Terug naar de brief"
     >
       {tones.length > 0 && (
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: '#8C6D1F', background: 'rgba(230,200,88,.18)', borderRadius: 20, padding: '5px 12px', margin: '0 0 4px' }}>
@@ -385,9 +389,6 @@ export default function ScriptPage({ params }) {
       <p style={{ marginTop: 20, fontSize: 11.5, color: '#8C8880', lineHeight: 1.5 }}>
         Je krijgt na deze stap nog één moment om het script bij te stellen, voordat de opname start.
       </p>
-      <div style={{ marginTop: 20 }}>
-        <a href={`/brief/${id}/details`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de brief</a>
-      </div>
     </StepShell>
   );
 }

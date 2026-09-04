@@ -17,8 +17,8 @@ export default async function LibraryPage() {
           TFA
         </Link>
         <nav style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <Link href="/dashboard" style={{ padding: '10px 12px', borderRadius: 8, color: '#B9B6AC', fontSize: 14, textDecoration: 'none' }}>Dashboard</Link>
-          <Link href="/dashboard/library" style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(230,200,88,.12)', color: '#FFFFFF', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>Bibliotheek</Link>
+          <Link href="/dashboard" className="tfa-dash-navlink" style={{ padding: '10px 12px', borderRadius: 8, color: '#B9B6AC', fontSize: 14, textDecoration: 'none' }}>Dashboard</Link>
+          <Link href="/dashboard/library" className="tfa-dash-navlink tfa-dash-navlink--active" style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(230,200,88,.12)', color: '#FFFFFF', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>Bibliotheek</Link>
         </nav>
       </aside>
 
@@ -34,6 +34,9 @@ export default async function LibraryPage() {
           .tfa-dash-shell { flex-direction: column; }
           .tfa-dash-sidebar { flex: none; width: 100%; min-height: auto; }
         }
+        .tfa-dash-navlink { transition: background .15s ease, color .15s ease; }
+        .tfa-dash-navlink:hover { background: rgba(255,255,255,.08); color: #FFFFFF; }
+        .tfa-dash-navlink--active:hover { background: rgba(230,200,88,.2); color: #FFFFFF; }
       `}</style>
     </div>
   );

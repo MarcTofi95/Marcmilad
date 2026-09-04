@@ -4,7 +4,13 @@
 // never authenticated.
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 
-const isProtectedRoute = createRouteMatcher(['/dashboard', '/dashboard/(.*)']);
+const isProtectedRoute = createRouteMatcher([
+  '/dashboard',
+  '/dashboard/(.*)',
+  // Producer-only API routes (e.g. changing a brief's workflow status) —
+  // distinct from the public /api/briefs* routes the client-facing flow uses.
+  '/api/dashboard/(.*)',
+]);
 
 // If Clerk keys aren't configured (local dev with zero env vars), skip auth
 // entirely rather than throwing — the rest of the app should still work.

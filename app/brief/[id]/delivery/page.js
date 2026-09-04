@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import Preloader from '../../../../components/Preloader';
+import useMinDelay from '../../../../components/useMinDelay';
 import { useBrief } from '../../../../components/useBrief';
 import { MONTH_NAMES } from '../../../../components/flowData';
 
@@ -12,6 +13,7 @@ export default function DeliveryPage({ params }) {
   const { id } = params;
   const router = useRouter();
   const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
+  const showLoader = useMinDelay(loading, 4000);
   const [form, setForm] = useState({
     hoofdspotLength: '20',
     needsVariations: null,
@@ -51,7 +53,7 @@ export default function DeliveryPage({ params }) {
     router.push(`/brief/${id}/details`);
   }
 
-  if (loading) return <Preloader />;
+  if (showLoader) return <Preloader />;
 
   const todayISO = new Date().toISOString().slice(0, 10);
   const currentMonth = new Date().getMonth() + 1;
@@ -62,7 +64,7 @@ export default function DeliveryPage({ params }) {
   if (form.needsVariations) summaryParts.push('variatie(s) (' + form.hoofdspotLength + '″)');
 
   return (
-    <StepShell briefId={id} current={2} brief={brief} bigNum="02" kicker="Wat we gaan opleveren" title="Jouw commercial" hint="Dit bepaalt hoeveel bestanden TFA straks aanlevert.">
+    <StepShell briefId={id} current={2} brief={brief} bigNum="02" kicker="Wat we gaan opleveren" title="Jouw commercial" hint="Dit bepaalt hoeveel bestanden TFA straks aanlevert." backHref={`/brief/${id}/contact`} backLabel="Terug naar je gegevens">
       <div className="field-grid">
         <div>
           <label className="field-label">Aantal impressies</label>
@@ -141,9 +143,6 @@ export default function DeliveryPage({ params }) {
         )}
       </div>
 
-      <div style={{ marginTop: 22 }}>
-        <a href={`/brief/${id}/contact`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar je gegevens</a>
-      </div>
 
       <div style={{ marginTop: 22, paddingTop: 22, borderTop: '1px solid #EAE7DE', display: 'flex', justifyContent: 'flex-end' }}>
         <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} onClick={next}>

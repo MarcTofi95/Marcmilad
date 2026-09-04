@@ -35,7 +35,7 @@ export async function addTrackAction(formData) {
     title: formData.get('title'),
     artist: formData.get('artist'),
     category: formData.get('category'),
-    duration: formData.get('duration') || '0:20',
+    fileId: formData.get('fileId') || '',
     audioUrl,
   });
   revalidatePath('/dashboard/library');
@@ -59,6 +59,7 @@ export async function addVoiceAction(formData) {
     gender: formData.get('gender'),
     ageRange: formData.get('ageRange'),
     tags,
+    fileId: formData.get('fileId') || '',
     audioUrl,
   });
   revalidatePath('/dashboard/library');
@@ -66,5 +67,44 @@ export async function addVoiceAction(formData) {
 
 export async function removeVoiceAction(id) {
   await deleteVoice(id);
+  revalidatePath('/dashboard/library');
+}
+
+// Bulk import — the drag-and-drop multi-file flow in LibraryClient stages N
+// files client-side with an editable field set per file, then submits one
+// FormData with indexed keys (track_0_title, track_0_audioFile, ...) which
+// we loop through here and import one by one.
+export async function addTracksBulkAction(formData) {
+  const count = Number(formData.get('count') || 0);
+  for (let i = 0; i < count; i++) {
+    const audioFile = formData.get(`track_${i}_audioFile`);
+    const audioUrl = await uploadAudioIfPresent(audioFile, 'tracks');
+    await createTrack({
+      title: formData.get(`track_${i}_title`),
+      artist: formData.get(`track_${i}_artist`),
+      category: formData.get(`track_${i}_category`),
+      fileId: formData.get(`track_${i}_fileId`) || '',
+      audioUrl,
+    });
+  }
+  revalidatePath('/dashboard/library');
+}
+
+export async function addVoicesBulkAction(formData) {
+  const count = Number(formData.get('count') || 0);
+  for (let i = 0; i < count; i++) {
+    const audioFile = formData.get(`voice_${i}_audioFile`);
+    const audioUrl = await uploadAudioIfPresent(audioFile, 'voices');
+    const tagsRaw = formData.get(`voice_${i}_tags`) || '';
+    const tags = tagsRaw.toString().split(',').map((t) => t.trim()).filter(Boolean);
+    await createVoice({
+      name: formData.get(`voice_${i}_name`),
+      gender: formData.get(`voice_${i}_gender`),
+      ageRange: formData.get(`voice_${i}_ageRange`),
+      tags,
+      fileId: formData.get(`voice_${i}_fileId`) || '',
+      audioUrl,
+    });
+  }
   revalidatePath('/dashboard/library');
 }
