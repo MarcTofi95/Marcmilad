@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 import { MONTH_NAMES } from '../../../../components/flowData';
 
@@ -50,7 +51,7 @@ export default function DeliveryPage({ params }) {
     router.push(`/brief/${id}/details`);
   }
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   const todayISO = new Date().toISOString().slice(0, 10);
   const currentMonth = new Date().getMonth() + 1;

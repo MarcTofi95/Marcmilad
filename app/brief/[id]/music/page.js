@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 
 const MAX_TRACKS = 3;
@@ -133,7 +134,7 @@ export default function MusicPage({ params }) {
     router.push(`/brief/${id}/overview`);
   }
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   if (!brief) {
     return (

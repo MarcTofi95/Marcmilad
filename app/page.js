@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import BrandMark from '../components/BrandMark';
 
 // Public marketing homepage — general layout/copy inspired by
 // /tmp/canvas_work/Homepage.dc.html, wired to real routes (no data needed).
@@ -6,14 +7,8 @@ export default function HomePage() {
   return (
     <div style={{ minHeight: '100vh', background: '#DEDCD7' }}>
       <header style={{ maxWidth: 1180, margin: '0 auto', padding: '28px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, letterSpacing: '.09em', textTransform: 'uppercase', color: '#1D1D1D', fontWeight: 600 }}>
-          <svg width="16" height="12" viewBox="0 0 14 10">
-            <rect x="0" y="3" width="1.6" height="4" rx="0.8" fill="#1D1D1D" />
-            <rect x="2.8" y="1.5" width="1.6" height="7" rx="0.8" fill="#1D1D1D" />
-            <rect x="5.6" y="0" width="1.6" height="10" rx="0.8" fill="#1D1D1D" />
-            <rect x="8.4" y="1.5" width="1.6" height="7" rx="0.8" fill="#1D1D1D" />
-            <rect x="11.2" y="3" width="1.6" height="4" rx="0.8" fill="#1D1D1D" />
-          </svg>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 14, letterSpacing: '.09em', textTransform: 'uppercase', color: '#1D1D1D', fontWeight: 600 }}>
+          <BrandMark size={24} />
           TFA Commercial Productie
         </div>
         <Link href="/sign-in" style={{ fontSize: 13, fontWeight: 600, color: '#383209', textDecoration: 'underline', textUnderlineOffset: 2 }}>

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 import { AGE_LABELS } from '../../../../components/flowData';
 
@@ -145,7 +146,7 @@ export default function VoicePage({ params }) {
     router.push(`/brief/${id}/music`);
   }
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   if (!brief) {
     return (

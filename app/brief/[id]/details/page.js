@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 import { TONE_LABELS } from '../../../../components/flowData';
 
@@ -85,7 +86,7 @@ export default function DetailsPage({ params }) {
     router.push(`/brief/${id}/script`);
   }
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   return (
     <StepShell briefId={id} current={3} brief={brief} bigNum="03" kicker="De inhoud" title="Jouw brief" hint="Nog een paar korte vragen over je commercial en je brief.">

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 import { MONTH_NAMES_LOWER } from '../../../../components/flowData';
 
@@ -43,7 +44,7 @@ export default function OverviewPage({ params }) {
     setConsentChecked(false);
   }, [id]);
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   if (!brief) {
     return (

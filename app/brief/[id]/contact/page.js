@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { useBrief } from '../../../../components/useBrief';
 
 // Step 1 — mirrors public/contact.html.
@@ -43,7 +44,7 @@ export default function ContactPage({ params }) {
     router.push(`/brief/${id}/delivery`);
   }
 
-  if (loading) return null;
+  if (loading) return <Preloader />;
 
   return (
     <StepShell briefId={id} current={1} brief={brief} bigNum="01" kicker="Wie ben je" title="Jouw gegevens">

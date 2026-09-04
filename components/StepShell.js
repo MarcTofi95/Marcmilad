@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import BrandMark from './BrandMark';
 import { STEPS, computeReached } from './flowData';
 
 function WaveIcon({ dim }) {
@@ -34,8 +35,8 @@ export default function StepShell({ briefId, current, brief, subtitle, bigNum, k
         }}
         className="tfa-sidebar"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500 }}>
-          <WaveIcon />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500 }}>
+          <BrandMark size={22} />
           TFA
         </div>
         <h1

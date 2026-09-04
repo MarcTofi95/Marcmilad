@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
+import Preloader from '../../../../components/Preloader';
 import { TONE_LABELS, estimateSeconds, wordCountOf } from '../../../../components/flowData';
 
 const DEFAULT_DISCLAIMER = 'Nog geen verplichte tekst ontvangen — deze verschijnt hier zodra ingevuld in de brief.';
@@ -184,7 +185,7 @@ export default function ScriptPage({ params }) {
     router.push(`/brief/${id}/voice`);
   }
 
-  if (!firstLoadDone) return null;
+  if (!firstLoadDone) return <Preloader />;
 
   if (!brief) {
     return (
