@@ -21,6 +21,8 @@ export default function DeliveryPage({ params }) {
     airMonth: '',
   });
 
+  // Hydrate from the brief once per id, not on every autosave echo — see the
+  // long comment in contact/page.js's identical effect for why.
   useEffect(() => {
     if (brief) {
       setForm({
@@ -33,7 +35,8 @@ export default function DeliveryPage({ params }) {
         airMonth: brief.airMonth || '',
       });
     }
-  }, [brief]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief && brief.id]);
 
   function update(patchObj) {
     const next = { ...form, ...patchObj };

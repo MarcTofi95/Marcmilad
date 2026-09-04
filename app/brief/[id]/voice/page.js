@@ -16,6 +16,17 @@ export default function VoicePage({ params }) {
   const [phase, setPhase] = useState('questions');
   const [playingId, setPlayingId] = useState(null);
 
+  // Hydrate from the brief — and derive the initial questions/voices phase
+  // — only once per id, not on every autosave echo. This effect used to
+  // depend on the whole `brief` object, which changes reference every time
+  // patch() resolves (it calls setBrief() with the server's echoed row). That
+  // meant EVERY save while on this step re-ran `setPhase(...)`, and since
+  // `selectedVoiceId` is still blank right up until a voice is actually
+  // clicked, any autosave fired while the client was on the "questions"
+  // phase (e.g. from showPitches()'s own patch call) snapped `phase` straight
+  // back to 'questions' a moment after the user had moved on to 'voices' —
+  // this was the step-5 "won't advance" blocker. See the identical comment
+  // in contact/page.js for the general version of this bug.
   useEffect(() => {
     if (brief) {
       const next = {
@@ -28,7 +39,8 @@ export default function VoicePage({ params }) {
       setForm(next);
       setPhase(next.selectedVoiceId ? 'voices' : 'questions');
     }
-  }, [brief]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief && brief.id]);
 
   function update(patchObj) {
     const next = { ...form, ...patchObj };

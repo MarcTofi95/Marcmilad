@@ -18,6 +18,8 @@ export default function MusicPage({ params }) {
   const [openPlaylistId, setOpenPlaylistId] = useState(null);
   const [playingTrackId, setPlayingTrackId] = useState(null);
 
+  // Hydrate from the brief once per id, not on every autosave echo — see the
+  // long comment in contact/page.js's identical effect for why.
   useEffect(() => {
     if (brief) {
       let tracks = [];
@@ -30,7 +32,8 @@ export default function MusicPage({ params }) {
       setSelectedTracks(tracks);
       if (tracks.length) setOpenPlaylistId(tracks[0].playlistId);
     }
-  }, [brief]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief && brief.id]);
 
   function selectedIndex(trackId) {
     return selectedTracks.findIndex((t) => t.id === trackId);

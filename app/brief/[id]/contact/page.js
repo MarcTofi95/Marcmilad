@@ -12,6 +12,14 @@ export default function ContactPage({ params }) {
   const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
   const [form, setForm] = useState({ companyName: '', contactPerson: '', contactEmail: '' });
 
+  // Hydrate local form state from the fetched brief ONLY once, on first
+  // load — not on every subsequent `brief` update. patch() also calls
+  // setBrief() with the server's echoed row after every autosave, and this
+  // effect used to depend on the whole `brief` object, so it re-ran on every
+  // save and stomped the form with whatever had been sent moments earlier —
+  // dropping/glitching characters typed in the interim, and (worse, on other
+  // steps) resetting local UI state derived from the brief. Depending on the
+  // id instead of the object means it only fires once per brief.
   useEffect(() => {
     if (brief) {
       setForm({
@@ -20,7 +28,8 @@ export default function ContactPage({ params }) {
         contactEmail: brief.contactEmail || '',
       });
     }
-  }, [brief]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief && brief.id]);
 
   function update(field, value) {
     const next = { ...form, [field]: value };

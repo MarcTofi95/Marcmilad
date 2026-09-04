@@ -27,9 +27,9 @@ export default async function DashboardPage() {
         }}
         className="tfa-dash-sidebar"
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500 }}>
+        <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500, textDecoration: 'none' }}>
           TFA
-        </div>
+        </Link>
         <nav style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Link href="/dashboard" style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(230,200,88,.12)', color: '#FFFFFF', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>
             Dashboard

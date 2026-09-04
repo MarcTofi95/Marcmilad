@@ -1,9 +1,33 @@
 'use client';
 
 import { useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { addTrackAction, removeTrackAction, addVoiceAction, removeVoiceAction } from '../app/dashboard/library/actions';
 
 const cardStyle = { background: '#FBF9EC', border: '1.5px solid #EAE3C4', borderRadius: 12, padding: '14px 16px' };
+
+// Must be a child of the <form>, not the component that renders the form —
+// useFormStatus only reports the nearest ancestor <form>'s pending state
+// when called from a descendant. Shows a spinner + "Bezig met uploaden…"
+// while the server action (which may be uploading an audio file to Blob) is
+// in flight, since that can take a few seconds and the form previously gave
+// no feedback at all while it worked.
+function SubmitButton({ label, pendingLabel }) {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" className="btn-primary" disabled={pending} style={{ padding: '10px 16px', fontSize: 13, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 8, opacity: pending ? 0.75 : 1, cursor: pending ? 'wait' : 'pointer' }}>
+      {pending && (
+        <span
+          style={{
+            width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(29,29,29,.25)', borderTopColor: '#1D1D1D',
+            display: 'inline-block', animation: 'tfa-spin .7s linear infinite',
+          }}
+        />
+      )}
+      {pending ? (pendingLabel || 'Bezig…') : label}
+    </button>
+  );
+}
 
 export default function LibraryClient({ tracks, voices, categories, defaultTags }) {
   const [tab, setTab] = useState('music');
@@ -44,7 +68,7 @@ export default function LibraryClient({ tracks, voices, categories, defaultTags 
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
               <input name="audioFile" type="file" accept="audio/*" style={{ flex: 1, fontSize: 12.5 }} />
-              <button type="submit" className="btn-primary" style={{ padding: '10px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>Toevoegen</button>
+              <SubmitButton label="Toevoegen" pendingLabel="Bezig met uploaden…" />
             </div>
           </form>
 
@@ -87,7 +111,7 @@ export default function LibraryClient({ tracks, voices, categories, defaultTags 
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
               <input name="audioFile" type="file" accept="audio/*" style={{ flex: 1, fontSize: 12.5 }} />
-              <button type="submit" className="btn-primary" style={{ padding: '10px 16px', fontSize: 13, whiteSpace: 'nowrap' }}>Toevoegen</button>
+              <SubmitButton label="Toevoegen" pendingLabel="Bezig met uploaden…" />
             </div>
             <div className="hint" style={{ marginTop: 8 }}>
               Bestaande tags: {tagInput} — of typ een nieuwe tag hierboven om die aan de lijst toe te voegen.
@@ -122,6 +146,9 @@ export default function LibraryClient({ tracks, voices, categories, defaultTags 
         }
         @media (max-width: 720px) {
           .tfa-lib-grid { grid-template-columns: 1fr !important; }
+        }
+        @keyframes tfa-spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

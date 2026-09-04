@@ -21,6 +21,8 @@ export default function DetailsPage({ params }) {
   });
   const [generating, setGenerating] = useState(false);
 
+  // Hydrate from the brief once per id, not on every autosave echo — see the
+  // long comment in contact/page.js's identical effect for why.
   useEffect(() => {
     if (brief) {
       let tones = [];
@@ -44,7 +46,8 @@ export default function DetailsPage({ params }) {
         toneOfVoice: tones,
       });
     }
-  }, [brief]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brief && brief.id]);
 
   function update(field, value) {
     const next = { ...form, [field]: value };

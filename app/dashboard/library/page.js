@@ -11,7 +11,7 @@ export default async function LibraryPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#DEDCD7', display: 'flex' }} className="tfa-dash-shell">
       <aside style={{ flex: '0 0 240px', background: '#1D1D1D', color: '#FFFFFF', minHeight: '100vh', padding: '32px 22px' }} className="tfa-dash-sidebar">
-        <div style={{ fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500 }}>TFA</div>
+        <Link href="/" style={{ display: 'inline-block', fontSize: 13, letterSpacing: '.09em', textTransform: 'uppercase', color: '#E6C858', fontWeight: 500, textDecoration: 'none' }}>TFA</Link>
         <nav style={{ marginTop: 32, display: 'flex', flexDirection: 'column', gap: 4 }}>
           <Link href="/dashboard" style={{ padding: '10px 12px', borderRadius: 8, color: '#B9B6AC', fontSize: 14, textDecoration: 'none' }}>Dashboard</Link>
           <Link href="/dashboard/library" style={{ padding: '10px 12px', borderRadius: 8, background: 'rgba(230,200,88,.12)', color: '#FFFFFF', fontWeight: 600, fontSize: 14, textDecoration: 'none' }}>Bibliotheek</Link>
