@@ -1,0 +1,152 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import StepShell from '../../../../components/StepShell';
+import { useBrief } from '../../../../components/useBrief';
+import { MONTH_NAMES } from '../../../../components/flowData';
+
+// Step 2 — mirrors public/delivery.html.
+export default function DeliveryPage({ params }) {
+  const { id } = params;
+  const router = useRouter();
+  const { brief, loading, saveState, schedulePatch, flushPending, patch } = useBrief(id);
+  const [form, setForm] = useState({
+    hoofdspotLength: '20',
+    needsVariations: null,
+    impressions: '',
+    impressionsCustom: '',
+    airDate: '',
+    dateUnknown: false,
+    airMonth: '',
+  });
+
+  useEffect(() => {
+    if (brief) {
+      setForm({
+        hoofdspotLength: brief.hoofdspotLength || '20',
+        needsVariations: brief.needsVariations,
+        impressions: brief.impressions || '',
+        impressionsCustom: brief.impressionsCustom || '',
+        airDate: brief.airDate || '',
+        dateUnknown: !!brief.dateUnknown,
+        airMonth: brief.airMonth || '',
+      });
+    }
+  }, [brief]);
+
+  function update(patchObj) {
+    const next = { ...form, ...patchObj };
+    setForm(next);
+    schedulePatch(patchObj);
+  }
+
+  async function next() {
+    flushPending();
+    await patch(form);
+    router.push(`/brief/${id}/details`);
+  }
+
+  if (loading) return null;
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const currentMonth = new Date().getMonth() + 1;
+  const monthOptions = [];
+  for (let m = currentMonth; m <= 12; m++) monthOptions.push({ value: String(m), label: MONTH_NAMES[m - 1] });
+
+  const summaryParts = ['1x hoofdspot (' + form.hoofdspotLength + '″)'];
+  if (form.needsVariations) summaryParts.push('variatie(s) (' + form.hoofdspotLength + '″)');
+
+  return (
+    <StepShell briefId={id} current={2} brief={brief} bigNum="02" kicker="Wat we gaan opleveren" title="Jouw commercial" hint="Dit bepaalt hoeveel bestanden TFA straks aanlevert.">
+      <div className="field-grid">
+        <div>
+          <label className="field-label">Aantal impressies</label>
+          <select value={form.impressions} onChange={(e) => update({ impressions: e.target.value })}>
+            <option value="">Kies een aantal</option>
+            <option value="25000">25.000</option>
+            <option value="50000">50.000</option>
+            <option value="100000">100.000</option>
+            <option value="150000">150.000</option>
+            <option value="250000">250.000</option>
+            <option value="500000">500.000</option>
+            <option value="meer">Meer dan 500.000</option>
+          </select>
+          {form.impressions === 'meer' && (
+            <div style={{ marginTop: 10 }}>
+              <label className="field-label">Hoeveel ongeveer?</label>
+              <input type="text" value={form.impressionsCustom} placeholder="Bijv. 750.000" onChange={(e) => update({ impressionsCustom: e.target.value })} />
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="field-label">Lengte van de hoofdspot</label>
+          <select value={form.hoofdspotLength} onChange={(e) => update({ hoofdspotLength: e.target.value })}>
+            <option value="20">20 seconden</option>
+            <option value="25">25 seconden</option>
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <label className="field-label" style={{ marginBottom: 3 }}>Zijn er ook variaties nodig van de hoofdspot?</label>
+        <div className="hint" style={{ marginBottom: 7 }}>
+          Dezelfde commercial, maar met bijvoorbeeld een ander product, filiaal of woord — geen aparte, kortere versie. Wat er
+          precies moet verschillen vragen we je pas zodra je het script hebt goedgekeurd.
+        </div>
+        <div style={{ display: 'flex', gap: 6, maxWidth: 340 }}>
+          <button type="button" className={'seg-btn' + (form.needsVariations === true ? ' selected' : '')} onClick={() => update({ needsVariations: true })}>Ja</button>
+          <button type="button" className={'seg-btn' + (form.needsVariations === false ? ' selected' : '')} onClick={() => update({ needsVariations: false })}>Nee</button>
+        </div>
+      </div>
+
+      <div className="box" style={{ marginTop: 16, background: '#E6C858', border: '2px solid #000', color: '#383209', fontSize: 12.5, lineHeight: 1.5 }}>
+        TFA levert op:<br />
+        <b>{summaryParts.join(' + ')}</b>
+      </div>
+
+      <div style={{ marginTop: 24, maxWidth: 360 }}>
+        <label className="field-label">Eerste uitzenddatum</label>
+        <input
+          type="date"
+          min={todayISO}
+          value={form.dateUnknown ? '' : form.airDate}
+          disabled={form.dateUnknown}
+          style={{ background: form.dateUnknown ? '#ECE9E1' : '#FFFFFF' }}
+          onChange={(e) => update({ airDate: e.target.value })}
+        />
+        <label className="check" style={{ marginTop: 8 }}>
+          <input
+            type="checkbox"
+            checked={form.dateUnknown}
+            onChange={(e) => update({ dateUnknown: e.target.checked, airDate: e.target.checked ? '' : form.airDate })}
+          />
+          Dit weet ik nog niet
+        </label>
+        {form.dateUnknown && (
+          <div className="box" style={{ marginTop: 10 }}>
+            <div className="hint" style={{ marginBottom: 8 }}>Geen probleem — geef ons dan in elk geval een maand, zodat we het project goed kunnen inplannen.</div>
+            <label className="field-label">Welke maand ongeveer?</label>
+            <select value={form.airMonth} onChange={(e) => update({ airMonth: e.target.value })}>
+              <option value="">Kies een maand</option>
+              {monthOptions.map((m) => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 22 }}>
+        <a href={`/brief/${id}/contact`} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar je gegevens</a>
+      </div>
+
+      <div style={{ marginTop: 22, paddingTop: 22, borderTop: '1px solid #EAE7DE', display: 'flex', justifyContent: 'flex-end' }}>
+        <button type="button" className="btn-primary" style={{ width: 320, flex: 'none' }} onClick={next}>
+          Volgende — verder naar je brief
+        </button>
+      </div>
+      <div style={{ fontSize: 11, color: '#8C8880', textAlign: 'right', marginTop: 10, height: 14 }}>{saveState}</div>
+    </StepShell>
+  );
+}
