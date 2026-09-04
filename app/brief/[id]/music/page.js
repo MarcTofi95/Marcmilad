@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import { useBrief } from '../../../../components/useBrief';
-import { PLAYLISTS } from '../../../../components/flowData';
 
 const MAX_TRACKS = 3;
 
 // Step 6 — mirrors public/music.html: browse curated playlists, pick up to
-// 3 favorite tracks.
+// 3 favorite tracks. Tracks come from the producer's real library (added
+// under /dashboard/library) via GET /api/library/tracks, grouped by their
+// category — this used to be a fixed, hard-coded sample pool
+// (components/flowData.js's old PLAYLISTS), which meant nothing a producer
+// added in the dashboard ever showed up here.
 export default function MusicPage({ params }) {
   const { id } = params;
   const router = useRouter();
@@ -17,20 +20,57 @@ export default function MusicPage({ params }) {
   const [selectedTracks, setSelectedTracks] = useState([]);
   const [openPlaylistId, setOpenPlaylistId] = useState(null);
   const [playingTrackId, setPlayingTrackId] = useState(null);
+  const [tracks, setTracks] = useState([]);
+  const [poolLoading, setPoolLoading] = useState(true);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/library/tracks');
+        const data = res.ok ? await res.json() : [];
+        if (!cancelled) setTracks(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (!cancelled) setTracks([]);
+      } finally {
+        if (!cancelled) setPoolLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Group the real track list into "playlists" by category — a category
+  // with no tracks in it simply doesn't appear, rather than every one of
+  // the 6 fixed categories always showing (possibly empty).
+  const playlists = Object.values(
+    tracks.reduce((acc, t) => {
+      const cat = t.category || 'Overig';
+      if (!acc[cat]) acc[cat] = { id: cat, name: cat, tracks: [] };
+      acc[cat].tracks.push(t);
+      return acc;
+    }, {})
+  ).sort((a, b) => a.name.localeCompare(b.name, 'nl'));
 
   // Hydrate from the brief once per id, not on every autosave echo — see the
   // long comment in contact/page.js's identical effect for why.
   useEffect(() => {
     if (brief) {
-      let tracks = [];
+      let saved = [];
       try {
-        tracks = brief.selectedTracks ? JSON.parse(brief.selectedTracks) : [];
-        if (!Array.isArray(tracks)) tracks = [];
+        saved = brief.selectedTracks ? JSON.parse(brief.selectedTracks) : [];
+        if (!Array.isArray(saved)) saved = [];
       } catch (e) {
-        tracks = [];
+        saved = [];
       }
-      setSelectedTracks(tracks);
-      if (tracks.length) setOpenPlaylistId(tracks[0].playlistId);
+      setSelectedTracks(saved);
+      if (saved.length) setOpenPlaylistId(saved[0].playlistId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brief && brief.id]);
@@ -64,12 +104,26 @@ export default function MusicPage({ params }) {
     saveTracks(next);
   }
 
-  function playPreview(trackId) {
-    setPlayingTrackId((cur) => {
-      const next = cur === trackId ? null : trackId;
-      if (next) setTimeout(() => setPlayingTrackId((c) => (c === trackId ? null : c)), 2200);
-      return next;
-    });
+  // Plays the track's real uploaded audio when it has one (audioUrl set via
+  // the library's Blob upload); falls back to a short fake "playing" state
+  // for tracks the producer hasn't attached audio to yet.
+  function playPreview(track) {
+    if (playingTrackId === track.id) {
+      if (audioRef.current) audioRef.current.pause();
+      setPlayingTrackId(null);
+      return;
+    }
+    if (audioRef.current) audioRef.current.pause();
+    if (track.audioUrl) {
+      const audio = new Audio(track.audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => setPlayingTrackId((c) => (c === track.id ? null : c));
+      audio.play().catch(() => {});
+      setPlayingTrackId(track.id);
+    } else {
+      setPlayingTrackId(track.id);
+      setTimeout(() => setPlayingTrackId((c) => (c === track.id ? null : c)), 2200);
+    }
   }
 
   async function next() {
@@ -95,55 +149,63 @@ export default function MusicPage({ params }) {
   const atLimit = selectedTracks.length >= MAX_TRACKS;
 
   return (
-    <StepShell briefId={id} current={6} brief={brief} bigNum="06" kicker="Onze voorstellen voor jou" title="Kies je muziek" hint={'TFA curateert deze playlists. Open een playlist, beluister een track en kies degene die het beste bij ' + name + ' past.'}>
+    <StepShell briefId={id} current={6} brief={brief} bigNum="06" kicker="Onze voorstellen voor jou" title="Kies je muziek" hint={'TFA curateert deze playlists. Open een categorie, beluister een track en kies degene die het beste bij ' + name + ' past.'}>
       <div className="box" style={{ border: '1px dashed #E6C858', fontSize: 12, color: '#383209', marginBottom: 20 }}>
         Je kunt tot <b>3 tracks</b> kiezen als favoriet. TFA combineert er uiteindelijk één met de gekozen stem tot je definitieve mix.
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {PLAYLISTS.map((pl) => {
-          const hasSelection = pl.tracks.some((t) => selectedIndex(t.id) !== -1);
-          const isOpen = openPlaylistId === pl.id;
-          return (
-            <div key={pl.id} style={{ background: '#FFFFFF', border: '1.5px solid ' + (hasSelection ? '#E6C858' : '#DEDCD7'), borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '15px 17px', cursor: 'pointer' }} onClick={() => setOpenPlaylistId(isOpen ? null : pl.id)}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600 }}>{pl.name}</div>
-                    {hasSelection && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#E6C858' }} />}
+      {poolLoading ? (
+        <div style={{ fontSize: 12.5, color: '#8C8880' }}>Muziek laden…</div>
+      ) : playlists.length === 0 ? (
+        <div style={{ background: '#FBF3F1', border: '1px solid #C2513F', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#C2513F' }}>
+          TFA heeft nog geen muziek in de bibliotheek gezet. Neem contact op met je producer.
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {playlists.map((pl) => {
+            const hasSelection = pl.tracks.some((t) => selectedIndex(t.id) !== -1);
+            const isOpen = openPlaylistId === pl.id;
+            return (
+              <div key={pl.id} style={{ background: '#FFFFFF', border: '1.5px solid ' + (hasSelection ? '#E6C858' : '#DEDCD7'), borderRadius: 12, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '15px 17px', cursor: 'pointer' }} onClick={() => setOpenPlaylistId(isOpen ? null : pl.id)}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{pl.name}</div>
+                      {hasSelection && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#E6C858' }} />}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#5C5850', marginTop: 2, lineHeight: 1.4 }}>{pl.tracks.length} track{pl.tracks.length === 1 ? '' : 's'}</div>
                   </div>
-                  <div style={{ fontSize: 12, color: '#5C5850', marginTop: 2, lineHeight: 1.4 }}>{pl.description}</div>
+                  <span style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
                 </div>
-                <span style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>▾</span>
-              </div>
-              {isOpen && (
-                <div style={{ borderTop: '1px solid #DEDCD7', padding: '4px 12px 10px' }}>
-                  {pl.tracks.map((track) => {
-                    const selected = selectedIndex(track.id) !== -1;
-                    const isPlaying = playingTrackId === track.id;
-                    return (
-                      <div key={track.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6, background: selected ? '#FBF0C8' : 'transparent', opacity: atLimit && !selected ? 0.45 : 1 }}>
-                        <button type="button" onClick={() => playPreview(track.id)} style={{ flex: 'none', width: 30, height: 30, borderRadius: '50%', border: '1px solid #C9C5B9', background: '#FBF9EC', cursor: 'pointer' }}>
-                          {isPlaying ? '❚❚' : '▶'}
-                        </button>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: selected ? 600 : 500, color: '#1D1D1D', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.title}</div>
-                          <div style={{ fontSize: 11, color: '#8C8880', marginTop: 1 }}>{track.artist} · {track.duration}</div>
+                {isOpen && (
+                  <div style={{ borderTop: '1px solid #DEDCD7', padding: '4px 12px 10px' }}>
+                    {pl.tracks.map((track) => {
+                      const selected = selectedIndex(track.id) !== -1;
+                      const isPlaying = playingTrackId === track.id;
+                      return (
+                        <div key={track.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6, background: selected ? '#FBF0C8' : 'transparent', opacity: atLimit && !selected ? 0.45 : 1 }}>
+                          <button type="button" onClick={() => playPreview(track)} style={{ flex: 'none', width: 30, height: 30, borderRadius: '50%', border: '1px solid #C9C5B9', background: '#FBF9EC', cursor: 'pointer' }}>
+                            {isPlaying ? '❚❚' : '▶'}
+                          </button>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: selected ? 600 : 500, color: '#1D1D1D', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{track.title}</div>
+                            <div style={{ fontSize: 11, color: '#8C8880', marginTop: 1 }}>{track.artist}{track.artist && track.duration ? ' · ' : ''}{track.duration}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => toggleTrack(track, pl)}
+                            style={{ flex: 'none', width: 20, height: 20, borderRadius: '50%', border: '1.5px solid ' + (selected ? '#E6C858' : '#C9C5B9'), background: selected ? '#E6C858' : '#FFFFFF', cursor: 'pointer' }}
+                          />
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => toggleTrack(track, pl)}
-                          style={{ flex: 'none', width: 20, height: 20, borderRadius: '50%', border: '1.5px solid ' + (selected ? '#E6C858' : '#C9C5B9'), background: selected ? '#E6C858' : '#FFFFFF', cursor: 'pointer' }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {selectedTracks.length > 0 && (
         <div style={{ marginTop: 16, borderRadius: 10, padding: '14px 16px', fontSize: 12.5, color: '#383209', lineHeight: 1.5, background: '#E6C858' }}>

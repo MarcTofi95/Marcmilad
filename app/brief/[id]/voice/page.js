@@ -1,13 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StepShell from '../../../../components/StepShell';
 import { useBrief } from '../../../../components/useBrief';
-import { VOICE_POOL, TAG_LABELS, AGE_LABELS } from '../../../../components/flowData';
+import { AGE_LABELS } from '../../../../components/flowData';
 
 // Step 5 — mirrors public/voice.html (questions phase, then a curated
-// shortlist of voices to pick from).
+// shortlist of voices to pick from). Voices come from the producer's real
+// library (added under /dashboard/library) via GET /api/library/voices —
+// this used to be a fixed, hard-coded sample pool (components/flowData.js's
+// old VOICE_POOL), which meant nothing a producer added in the dashboard
+// ever showed up here. Tags are now the library's own free-form tag labels
+// (e.g. "Warm & vertrouwd") rather than the old fixed tag-id list, so the
+// "karakter van de stem" question is now built from whatever tags actually
+// exist across the real voices, not a hard-coded set.
 export default function VoicePage({ params }) {
   const { id } = params;
   const router = useRouter();
@@ -15,6 +22,33 @@ export default function VoicePage({ params }) {
   const [form, setForm] = useState({ voiceGender: '', voiceAgeRange: '', voiceStyleTags: [], voiceNote: '', selectedVoiceId: '' });
   const [phase, setPhase] = useState('questions');
   const [playingId, setPlayingId] = useState(null);
+  const [voicePool, setVoicePool] = useState([]);
+  const [poolLoading, setPoolLoading] = useState(true);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/library/voices');
+        const data = res.ok ? await res.json() : [];
+        if (!cancelled) setVoicePool(Array.isArray(data) ? data : []);
+      } catch (e) {
+        if (!cancelled) setVoicePool([]);
+      } finally {
+        if (!cancelled) setPoolLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const allTags = Array.from(new Set(voicePool.flatMap((v) => v.tags || []))).sort();
 
   // Hydrate from the brief — and derive the initial questions/voices phase
   // — only once per id, not on every autosave echo. This effect used to
@@ -61,26 +95,41 @@ export default function VoicePage({ params }) {
     const wantGender = form.voiceGender && form.voiceGender !== 'geen-voorkeur' ? form.voiceGender : null;
     const wantAge = form.voiceAgeRange || null;
     const wantTags = form.voiceStyleTags;
-    if (!wantGender && !wantAge && wantTags.length === 0) return VOICE_POOL;
-    const filtered = VOICE_POOL.filter((v) => {
+    if (!wantGender && !wantAge && wantTags.length === 0) return voicePool;
+    const filtered = voicePool.filter((v) => {
       if (wantGender && v.gender !== wantGender) return false;
-      if (wantAge && v.age !== wantAge) return false;
-      if (wantTags.length && !wantTags.some((t) => v.tags.includes(t))) return false;
+      if (wantAge && v.ageRange !== wantAge) return false;
+      if (wantTags.length && !wantTags.some((t) => (v.tags || []).includes(t))) return false;
       return true;
     });
-    return filtered.length ? filtered : VOICE_POOL;
+    return filtered.length ? filtered : voicePool;
   }
 
   function selectVoice(voice) {
-    update({ selectedVoiceId: voice.id, selectedVoiceLabel: voice.label, selectedVoiceTags: voice.tags.map((t) => TAG_LABELS[t]).join(',') });
+    update({ selectedVoiceId: voice.id, selectedVoiceLabel: voice.name, selectedVoiceTags: (voice.tags || []).join(',') });
   }
 
-  function playPreview(vid) {
-    setPlayingId((cur) => {
-      const next = cur === vid ? null : vid;
-      if (next) setTimeout(() => setPlayingId((c) => (c === vid ? null : c)), 2200);
-      return next;
-    });
+  // Plays the voice's real uploaded sample when it has one (audioUrl set via
+  // the library's Blob upload); falls back to a short fake "playing" state
+  // for voices the producer hasn't attached audio to yet, so the button
+  // still does *something* rather than silently failing.
+  function playPreview(voice) {
+    if (playingId === voice.id) {
+      if (audioRef.current) audioRef.current.pause();
+      setPlayingId(null);
+      return;
+    }
+    if (audioRef.current) audioRef.current.pause();
+    if (voice.audioUrl) {
+      const audio = new Audio(voice.audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => setPlayingId((c) => (c === voice.id ? null : c));
+      audio.play().catch(() => {});
+      setPlayingId(voice.id);
+    } else {
+      setPlayingId(voice.id);
+      setTimeout(() => setPlayingId((c) => (c === voice.id ? null : c)), 2200);
+    }
   }
 
   async function showPitches() {
@@ -135,8 +184,11 @@ export default function VoicePage({ params }) {
             <label className="field-label" style={{ marginBottom: 3 }}>Karakter van de stem</label>
             <div className="hint" style={{ marginBottom: 8 }}>Kies er een of meer.</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {Object.entries(TAG_LABELS).map(([v, label]) => (
-                <button key={v} type="button" className={'tone-chip' + (form.voiceStyleTags.includes(v) ? ' active' : '')} onClick={() => toggleTag(v)}>{label}</button>
+              {allTags.length === 0 && !poolLoading && (
+                <span style={{ fontSize: 12.5, color: '#8C8880' }}>Nog geen tags beschikbaar.</span>
+              )}
+              {allTags.map((v) => (
+                <button key={v} type="button" className={'tone-chip' + (form.voiceStyleTags.includes(v) ? ' active' : '')} onClick={() => toggleTag(v)}>{v}</button>
               ))}
             </div>
           </div>
@@ -153,30 +205,38 @@ export default function VoicePage({ params }) {
           <p style={{ fontSize: 13.5, lineHeight: 1.55, color: '#5C5850', margin: '0 0 20px' }}>
             Op basis van je antwoorden stelt TFA deze stemmen voor. Beluister elk voorbeeld en kies de stem die het beste past.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {curatedVoices().map((voice) => {
-              const isSelected = form.selectedVoiceId === voice.id;
-              const isPlaying = playingId === voice.id;
-              return (
-                <div key={voice.id} style={{ background: '#FFFFFF', border: '1.5px solid ' + (isSelected ? '#E6C858' : '#DEDCD7'), borderRadius: 12, padding: '15px 17px', cursor: 'pointer' }} onClick={() => selectVoice(voice)}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                    <div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1D' }}>{voice.label}</div>
-                      <div style={{ fontSize: 12, color: '#5C5850', marginTop: 2 }}>{voice.tags.map((t) => TAG_LABELS[t]).join(' · ')} · {AGE_LABELS[voice.age]}</div>
+          {poolLoading ? (
+            <div style={{ fontSize: 12.5, color: '#8C8880' }}>Stemmen laden…</div>
+          ) : voicePool.length === 0 ? (
+            <div style={{ background: '#FBF3F1', border: '1px solid #C2513F', borderRadius: 10, padding: '12px 14px', fontSize: 12.5, color: '#C2513F' }}>
+              TFA heeft nog geen stemmen in de bibliotheek gezet. Neem contact op met je producer.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {curatedVoices().map((voice) => {
+                const isSelected = form.selectedVoiceId === voice.id;
+                const isPlaying = playingId === voice.id;
+                return (
+                  <div key={voice.id} style={{ background: '#FFFFFF', border: '1.5px solid ' + (isSelected ? '#E6C858' : '#DEDCD7'), borderRadius: 12, padding: '15px 17px', cursor: 'pointer' }} onClick={() => selectVoice(voice)}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: '#1D1D1D' }}>{voice.name}</div>
+                        <div style={{ fontSize: 12, color: '#5C5850', marginTop: 2 }}>{(voice.tags || []).join(' · ')}{voice.ageRange ? ' · ' + (AGE_LABELS[voice.ageRange] || voice.ageRange) : ''}</div>
+                      </div>
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', border: '1.5px solid ' + (isSelected ? '#E6C858' : '#C9C5B9'), background: isSelected ? '#E6C858' : '#FFFFFF' }} />
                     </div>
-                    <div style={{ width: 22, height: 22, borderRadius: '50%', border: '1.5px solid ' + (isSelected ? '#E6C858' : '#C9C5B9'), background: isSelected ? '#E6C858' : '#FFFFFF' }} />
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); playPreview(voice); }}
+                      style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: '1px solid #C9C5B9', borderRadius: 9, background: '#FBF9EC', color: '#383209', fontWeight: 500, fontSize: 12.5, padding: '9px 12px', cursor: 'pointer' }}
+                    >
+                      {isPlaying ? 'Bezig met afspelen…' : voice.audioUrl ? 'Voorbeeld beluisteren' : 'Voorbeeld beluisteren (geen audio)'}
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); playPreview(voice.id); }}
-                    style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: '1px solid #C9C5B9', borderRadius: 9, background: '#FBF9EC', color: '#383209', fontWeight: 500, fontSize: 12.5, padding: '9px 12px', cursor: 'pointer' }}
-                  >
-                    {isPlaying ? 'Bezig met afspelen…' : 'Voorbeeld beluisteren'}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
           <div style={{ marginTop: 18 }}>
             <a href="#" onClick={(e) => { e.preventDefault(); setPhase('questions'); }} style={{ fontSize: 12, color: '#8C8880', textDecoration: 'underline' }}>← Terug naar de vragen</a>
           </div>
