@@ -16,6 +16,15 @@ function rangeToMs(key) {
   return days ? days * 24 * 60 * 60 * 1000 : null;
 }
 
+function parseSelectedTracks(brief) {
+  try {
+    const parsed = brief.selectedTracks ? JSON.parse(brief.selectedTracks) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 function statusOf(brief) {
   if (brief.submittedAt) return { label: 'Verzonden', color: '#1D7A46', bg: 'rgba(29,122,70,.12)' };
   if (brief.selectedVoiceId || brief.generatedScript) return { label: 'In behandeling', color: '#8C6D1F', bg: 'rgba(230,200,88,.18)' };
@@ -177,6 +186,23 @@ export default function DashboardClient({ briefs }) {
               <div><b>Contact:</b> {selected.contactPerson || '—'} ({selected.contactEmail || '—'})</div>
               <div><b>Hoofdspot:</b> {selected.hoofdspotLength || '20'}″{selected.needsVariations ? ' + variatie' : ''}</div>
               <div><b>Stem:</b> {selected.selectedVoiceLabel || 'Nog niet gekozen'}</div>
+              <div>
+                <b>Muziek:</b>
+                {(() => {
+                  const tracks = parseSelectedTracks(selected);
+                  if (!tracks.length) return ' Nog niet gekozen';
+                  return (
+                    <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                      {tracks.map((t, i) => (
+                        <li key={t.id || i}>
+                          {t.title || 'Onbekende track'}{t.artist ? ` — ${t.artist}` : ''}
+                          {' '}<span style={{ color: '#8C6D1F', fontWeight: 600 }}>({t.playlistName || 'categorie onbekend'})</span>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
+              </div>
               <div><b>Status:</b> {statusOf(selected).label}</div>
               <div><b>Aangemaakt:</b> {new Date(selected.createdAt).toLocaleString('nl-NL')}</div>
               {selected.submittedAt && <div><b>Verzonden:</b> {new Date(selected.submittedAt).toLocaleString('nl-NL')}</div>}
