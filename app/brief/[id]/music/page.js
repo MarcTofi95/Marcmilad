@@ -24,6 +24,7 @@ export default function MusicPage({ params }) {
   const [openPlaylistId, setOpenPlaylistId] = useState(null);
   const [playingTrackId, setPlayingTrackId] = useState(null);
   const [tracks, setTracks] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [poolLoading, setPoolLoading] = useState(true);
   const audioRef = useRef(null);
 
@@ -31,11 +32,18 @@ export default function MusicPage({ params }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/library/tracks');
-        const data = res.ok ? await res.json() : [];
-        if (!cancelled) setTracks(Array.isArray(data) ? data : []);
+        const [tracksRes, categoriesRes] = await Promise.all([
+          fetch('/api/library/tracks'),
+          fetch('/api/library/categories'),
+        ]);
+        const tracksData = tracksRes.ok ? await tracksRes.json() : [];
+        const categoriesData = categoriesRes.ok ? await categoriesRes.json() : [];
+        if (!cancelled) {
+          setTracks(Array.isArray(tracksData) ? tracksData : []);
+          setCategories(Array.isArray(categoriesData) ? categoriesData : []);
+        }
       } catch (e) {
-        if (!cancelled) setTracks([]);
+        if (!cancelled) { setTracks([]); setCategories([]); }
       } finally {
         if (!cancelled) setPoolLoading(false);
       }
@@ -72,14 +80,22 @@ export default function MusicPage({ params }) {
   // Group the real track list into "playlists" by category — a category
   // with no tracks in it simply doesn't appear, rather than every one of
   // the 6 fixed categories always showing (possibly empty).
-  const playlists = Object.values(
-    tracks.reduce((acc, t) => {
-      const cat = t.category || 'Overig';
-      if (!acc[cat]) acc[cat] = { id: cat, name: cat, tracks: [] };
-      acc[cat].tracks.push(t);
-      return acc;
-    }, {})
-  ).sort((a, b) => a.name.localeCompare(b.name, 'nl'));
+  // Every known category always shows as its own playlist — even with zero
+  // tracks uploaded yet — instead of only categories that happen to have at
+  // least one track. Any track whose category isn't in the known list
+  // (shouldn't normally happen) still gets its own group, appended after.
+  const byCategory = {};
+  categories.forEach((cat) => { byCategory[cat] = { id: cat, name: cat, tracks: [] }; });
+  tracks.forEach((t) => {
+    const cat = t.category || 'Overig';
+    if (!byCategory[cat]) byCategory[cat] = { id: cat, name: cat, tracks: [] };
+    byCategory[cat].tracks.push(t);
+  });
+  const known = categories.filter((c) => byCategory[c]).map((c) => byCategory[c]);
+  const extra = Object.values(byCategory)
+    .filter((pl) => !categories.includes(pl.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'nl'));
+  const playlists = known.concat(extra);
 
   // Hydrate from the brief once per id, not on every autosave echo — see the
   // long comment in contact/page.js's identical effect for why.
@@ -204,6 +220,11 @@ export default function MusicPage({ params }) {
                 </div>
                 {isOpen && (
                   <div style={{ borderTop: '1px solid #DEDCD7', padding: '4px 12px 10px' }}>
+                    {pl.tracks.length === 0 && (
+                      <div style={{ padding: '10px 8px', fontSize: 12, color: '#8C8880', fontStyle: 'italic' }}>
+                        Nog geen tracks in deze categorie.
+                      </div>
+                    )}
                     {pl.tracks.map((track) => {
                       const selected = selectedIndex(track.id) !== -1;
                       const isPlaying = playingTrackId === track.id;

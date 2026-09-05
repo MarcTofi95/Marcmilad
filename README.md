@@ -33,7 +33,7 @@ file for the full list and what each one does. Summary:
 | Var | Effect if unset |
 |---|---|
 | `POSTGRES_URL` | In-memory data store instead of real Postgres (not persistent, not shared across serverless instances). |
-| `ANTHROPIC_API_KEY` / `OLLAMA_HOST` + `OLLAMA_MODEL` | Falls back to the deterministic template script generator. |
+| `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `OLLAMA_HOST` + `OLLAMA_MODEL` | Tried in that order (Claude, then Gemini, then Ollama); falls back to the deterministic template script generator if none are set or the call fails. Gemini is free — see `lib/scriptgen.js` for setup notes. |
 | `RESEND_API_KEY` / `SENDER_EMAIL` | Confirmation emails are stored as `sent_emails` rows instead of sent. |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` | `/dashboard*` is left unprotected (middleware no-ops) and sign-in/up pages show a "not configured" message. |
 

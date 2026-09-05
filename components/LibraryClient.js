@@ -38,11 +38,85 @@ function fileBaseName(file) {
   return dot > 0 ? name.slice(0, dot) : name;
 }
 
+// Voice tags picker — a dropdown of existing tags (checkable) plus a small
+// "add new tag" field, replacing the old free-text "comma-separated tags"
+// input. Music has no tags field, so this is voice-only. `selected` is the
+// array of chosen tag strings; `onChange` receives the updated array;
+// `onAddTag` is called once when a genuinely new tag is added, so the
+// caller can add it to the shared known-tags list (making it available in
+// every other tag picker on the page too, not just this one).
+function TagPicker({ allTags, selected, onChange, onAddTag }) {
+  const [open, setOpen] = useState(false);
+  const [newTag, setNewTag] = useState('');
+
+  function toggle(tag) {
+    if (selected.includes(tag)) onChange(selected.filter((t) => t !== tag));
+    else onChange([...selected, tag]);
+  }
+
+  function addNew() {
+    const tag = newTag.trim();
+    if (!tag) return;
+    if (!allTags.includes(tag)) onAddTag(tag);
+    if (!selected.includes(tag)) onChange([...selected, tag]);
+    setNewTag('');
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%', textAlign: 'left', border: '1px solid #C9C5B9', borderRadius: 8, padding: '9px 10px',
+          fontSize: 13, background: '#FFFFFF', cursor: 'pointer', minHeight: 38, display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center',
+        }}
+      >
+        {selected.length === 0 && <span style={{ color: '#9C9890' }}>Kies tags…</span>}
+        {selected.map((tag) => (
+          <span key={tag} style={{ fontSize: 11.5, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: '#FBF0C8', color: '#383209' }}>
+            {tag}
+          </span>
+        ))}
+        <span style={{ marginLeft: 'auto', color: '#8C8880', fontSize: 11 }}>{open ? '▴' : '▾'}</span>
+      </button>
+
+      {open && (
+        <div style={{ position: 'absolute', zIndex: 20, top: '100%', left: 0, right: 0, marginTop: 4, background: '#FFFFFF', border: '1px solid #C9C5B9', borderRadius: 8, boxShadow: '0 4px 16px rgba(29,29,29,.12)', padding: 8, maxHeight: 220, overflowY: 'auto' }}>
+          {allTags.map((tag) => (
+            <label key={tag} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px', fontSize: 12.5, cursor: 'pointer', borderRadius: 6 }}>
+              <input type="checkbox" checked={selected.includes(tag)} onChange={() => toggle(tag)} />
+              {tag}
+            </label>
+          ))}
+          {allTags.length === 0 && <div style={{ fontSize: 12, color: '#8C8880', padding: '4px 6px' }}>Nog geen tags beschikbaar.</div>}
+          <div style={{ marginTop: 6, paddingTop: 8, borderTop: '1px solid #EEECE3', display: 'flex', gap: 6 }}>
+            <input
+              type="text"
+              value={newTag}
+              onChange={(e) => setNewTag(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNew(); } }}
+              placeholder="Nieuwe tag..."
+              style={{ flex: 1, border: '1px solid #C9C5B9', borderRadius: 6, padding: '6px 8px', fontSize: 12.5 }}
+            />
+            <button type="button" onClick={addNew} style={{ border: 'none', borderRadius: 6, background: '#1D1D1D', color: '#FFFFFF', fontSize: 12, padding: '6px 12px', cursor: 'pointer' }}>
+              Toevoegen
+            </button>
+          </div>
+          <button type="button" onClick={() => setOpen(false)} style={{ marginTop: 6, width: '100%', border: 'none', background: 'transparent', color: '#8C8880', fontSize: 11.5, cursor: 'pointer', padding: '4px 0' }}>
+            Sluiten
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Shared drag-and-drop staging zone + bulk-review list used by both the
 // Muziek and Stemmen tabs. `fields` describes the per-item editable inputs
 // to render for each staged file; the parent supplies the exact shape it
 // needs via renderRow / buildFormData.
-function BulkImportZone({ kind, categories, defaultGender, defaultAgeRange, onConfirm }) {
+function BulkImportZone({ kind, categories, defaultGender, defaultAgeRange, onConfirm, allTags, onAddTag }) {
   const [staged, setStaged] = useState([]);
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -62,7 +136,7 @@ function BulkImportZone({ kind, categories, defaultGender, defaultAgeRange, onCo
         name: fileBaseName(file),
         gender: defaultGender || 'vrouw',
         ageRange: defaultAgeRange || '35-54',
-        tags: '',
+        tags: [],
         fileId: '',
       })),
     ]);
@@ -141,7 +215,7 @@ function BulkImportZone({ kind, categories, defaultGender, defaultAgeRange, onCo
                     <option value="35-54">35–54</option>
                     <option value="55+">55+</option>
                   </select>
-                  <input type="text" value={it.tags} onChange={(e) => updateStaged(it.localId, { tags: e.target.value })} placeholder="Tags, komma-gescheiden" />
+                  <TagPicker allTags={allTags || []} selected={it.tags} onChange={(tags) => updateStaged(it.localId, { tags })} onAddTag={onAddTag} />
                   <input type="text" value={it.fileId} onChange={(e) => updateStaged(it.localId, { fileId: e.target.value })} placeholder="File ID (optioneel)" />
                 </div>
               )}
@@ -170,7 +244,16 @@ function BulkImportZone({ kind, categories, defaultGender, defaultAgeRange, onCo
 
 export default function LibraryClient({ tracks, voices, categories, defaultTags }) {
   const [tab, setTab] = useState('music');
-  const [tagInput, setTagInput] = useState(defaultTags.join(', '));
+  const [knownTags, setKnownTags] = useState(() => {
+    const set = new Set(defaultTags || []);
+    (voices || []).forEach((v) => (v.tags || []).forEach((t) => set.add(t)));
+    return Array.from(set);
+  });
+  const [selectedTags, setSelectedTags] = useState([]);
+
+  function addKnownTag(tag) {
+    setKnownTags((cur) => (cur.includes(tag) ? cur : [...cur, tag]));
+  }
 
   async function confirmTracksBulk(staged) {
     const formData = new FormData();
@@ -192,7 +275,7 @@ export default function LibraryClient({ tracks, voices, categories, defaultTags 
       formData.set(`voice_${i}_name`, it.name);
       formData.set(`voice_${i}_gender`, it.gender);
       formData.set(`voice_${i}_ageRange`, it.ageRange);
-      formData.set(`voice_${i}_tags`, it.tags);
+      formData.set(`voice_${i}_tags`, (it.tags || []).join(','));
       formData.set(`voice_${i}_fileId`, it.fileId);
       formData.set(`voice_${i}_audioFile`, it.file);
     });
@@ -277,19 +360,17 @@ export default function LibraryClient({ tracks, voices, categories, defaultTags 
                 <option value="35-54">35–54</option>
                 <option value="55+">55+</option>
               </select>
-              <input name="tags" type="text" defaultValue="" placeholder="Tags, komma-gescheiden" />
+              <TagPicker allTags={knownTags} selected={selectedTags} onChange={setSelectedTags} onAddTag={addKnownTag} />
               <input name="fileId" type="text" placeholder="File ID (optioneel)" />
             </div>
+            <input type="hidden" name="tags" value={selectedTags.join(',')} readOnly />
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
               <input name="audioFile" type="file" accept="audio/*" style={{ flex: 1, fontSize: 12.5 }} />
               <SubmitButton label="Toevoegen" pendingLabel="Bezig met uploaden…" />
             </div>
-            <div className="hint" style={{ marginTop: 8 }}>
-              Bestaande tags: {tagInput} — of typ een nieuwe tag hierboven om die aan de lijst toe te voegen.
-            </div>
           </form>
 
-          <BulkImportZone kind="voice" defaultGender="vrouw" defaultAgeRange="35-54" onConfirm={confirmVoicesBulk} />
+          <BulkImportZone kind="voice" defaultGender="vrouw" defaultAgeRange="35-54" onConfirm={confirmVoicesBulk} allTags={knownTags} onAddTag={addKnownTag} />
 
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
             {voices.map((v) => (

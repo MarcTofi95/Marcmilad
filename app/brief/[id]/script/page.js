@@ -8,9 +8,21 @@ import useMinDelay from '../../../../components/useMinDelay';
 import { TONE_LABELS, estimateSeconds, wordCountOf } from '../../../../components/flowData';
 
 const DEFAULT_DISCLAIMER = 'Nog geen verplichte tekst ontvangen — deze verschijnt hier zodra ingevuld in de brief.';
+// Mirrors lib/db.js's MAX_SCRIPT_HISTORY — how many script generations a
+// client can request per brief before "Opnieuw genereren" is disabled.
+const MAX_VERSIONS = 3;
 
 function briefHasEnoughContent(b) {
   return !!(b && (b.product || b.usp || b.mainMessage));
+}
+
+function parseHistory(brief) {
+  try {
+    const parsed = brief && brief.scriptHistory ? JSON.parse(brief.scriptHistory) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
 }
 
 // Step 4 — mirrors public/script.html: generation, live "estimated
@@ -21,6 +33,8 @@ export default function ScriptPage({ params }) {
   const router = useRouter();
   const [brief, setBrief] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState(null); // { message, debugId } | null
+  const [selectingVersionId, setSelectingVersionId] = useState(null);
   const [firstLoadDone, setFirstLoadDone] = useState(false);
   const showLoader = useMinDelay(!firstLoadDone, 4000);
   const [scriptText, setScriptText] = useState('');
@@ -47,11 +61,39 @@ export default function ScriptPage({ params }) {
 
   const generate = useCallback(async () => {
     setGenerating(true);
+    setGenError(null);
     try {
       const res = await fetch(`/api/briefs/${id}/generate-script`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBrief(data);
+      } else {
+        // The AI provider is configured but the call failed — show this
+        // explicitly instead of silently downgrading to a template script.
+        // The brief (and any previously generated script/history) is left
+        // untouched server-side, so nothing is lost here either.
+        setGenError({
+          message: data.message || 'De scriptservice is momenteel niet beschikbaar. Probeer het straks opnieuw.',
+          debugId: data.debugId || null,
+        });
+      }
+    } catch (e) {
+      setGenError({ message: 'Kon geen verbinding maken met de scriptservice. Controleer je internetverbinding en probeer het opnieuw.', debugId: null });
+    }
+    setGenerating(false);
+  }, [id]);
+
+  const selectVersion = useCallback(async (versionId) => {
+    setSelectingVersionId(versionId);
+    try {
+      const res = await fetch(`/api/briefs/${id}/select-script`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId }),
+      });
       if (res.ok) setBrief(await res.json());
     } catch (e) {}
-    setGenerating(false);
+    setSelectingVersionId(null);
   }, [id]);
 
   useEffect(() => {
@@ -217,6 +259,12 @@ export default function ScriptPage({ params }) {
   const canGenerate = briefHasEnoughContent(brief);
   const generatedText = brief.generatedScript || '';
 
+  const history = parseHistory(brief);
+  const canRegenerate = history.length < MAX_VERSIONS;
+  // Which stored version is currently "active" (what generatedScript points
+  // at) — matched by generation timestamp, which is unique per entry.
+  const activeVersionId = (history.find((h) => h.createdAt === brief.scriptGeneratedAt) || {}).id || null;
+
   const trimmed = (scriptText || '').trim();
   const words = wordCountOf(trimmed);
   const seconds = estimateSeconds(words);
@@ -262,25 +310,84 @@ export default function ScriptPage({ params }) {
         </div>
       )}
 
-      {hasGenerated && !generating && (
-        <div style={{ margin: '16px 0 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            style={{
-              display: 'inline-block', fontSize: 10.5, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase',
-              padding: '3px 9px', borderRadius: 999,
-              background: brief.scriptSource === 'ai' ? '#E6C858' : '#EAE7DE',
-              color: brief.scriptSource === 'ai' ? '#1D1D1D' : '#5C5850',
-            }}
-          >
-            {brief.scriptSource === 'ai' ? 'Gegenereerd met AI' : 'Automatisch samengesteld (sjabloon)'}
-          </span>
-          <button type="button" onClick={generate} style={{ border: 'none', background: 'transparent', color: '#383209', fontWeight: 600, fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
-            Opnieuw genereren
+      {genError && (
+        <div style={{ margin: '16px 0 4px', background: '#FBF3F1', border: '1px solid #C2513F', borderRadius: 10, padding: '12px 14px' }}>
+          <div style={{ fontSize: 12.5, color: '#C2513F', fontWeight: 600 }}>Scriptservice niet beschikbaar</div>
+          <div style={{ fontSize: 12.5, color: '#8A3A2E', marginTop: 4, lineHeight: 1.5 }}>{genError.message}</div>
+          {genError.debugId && (
+            <div style={{ fontSize: 11, color: '#B06156', marginTop: 6, fontFamily: 'monospace' }}>Foutcode: {genError.debugId}</div>
+          )}
+          <button type="button" onClick={generate} style={{ marginTop: 8, border: 'none', background: 'transparent', color: '#C2513F', fontWeight: 600, fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+            Probeer opnieuw
           </button>
         </div>
       )}
-      {generating && <div style={{ margin: '16px 0 4px', fontSize: 12.5, color: '#8C8880' }}>TFA&apos;s AI schrijft een scriptvoorstel op basis van je brief…</div>}
-      {!generating && !hasGenerated && (
+
+      {generating && (
+        <div style={{ margin: '16px 0 4px', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: '#5C5850' }}>
+          <span
+            style={{
+              width: 14, height: 14, borderRadius: '50%', border: '2px solid rgba(56,50,9,.2)', borderTopColor: '#383209',
+              display: 'inline-block', animation: 'tfa-script-spin .7s linear infinite', flex: 'none',
+            }}
+          />
+          TFA&apos;s AI schrijft een scriptvoorstel op basis van je brief — dit kan een paar seconden duren…
+        </div>
+      )}
+
+      {!generating && hasGenerated && (
+        <div style={{ margin: '16px 0 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span
+              style={{
+                display: 'inline-block', fontSize: 10.5, fontWeight: 600, letterSpacing: '.04em', textTransform: 'uppercase',
+                padding: '3px 9px', borderRadius: 999,
+                background: brief.scriptSource === 'ai' ? '#E6C858' : '#EAE7DE',
+                color: brief.scriptSource === 'ai' ? '#1D1D1D' : '#5C5850',
+              }}
+            >
+              {brief.scriptSource === 'ai' ? 'Gegenereerd met AI' : 'Automatisch samengesteld (sjabloon)'}
+            </span>
+            {canRegenerate ? (
+              <button type="button" onClick={generate} style={{ border: 'none', background: 'transparent', color: '#383209', fontWeight: 600, fontSize: 12, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                Opnieuw genereren ({history.length}/{MAX_VERSIONS})
+              </button>
+            ) : (
+              <span style={{ fontSize: 11.5, color: '#8C8880' }}>Maximaal aantal versies bereikt ({MAX_VERSIONS}/{MAX_VERSIONS})</span>
+            )}
+          </div>
+
+          {history.length > 1 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11.5, color: '#8C8880', marginBottom: 6 }}>Bekijk je eerdere versies en kies je favoriet:</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {history.map((h, i) => {
+                  const isActive = h.id === activeVersionId;
+                  const isBusy = selectingVersionId === h.id;
+                  return (
+                    <button
+                      key={h.id}
+                      type="button"
+                      disabled={isActive || isBusy}
+                      onClick={() => selectVersion(h.id)}
+                      title={h.main}
+                      style={{
+                        border: '1.5px solid ' + (isActive ? '#E6C858' : '#C9C5B9'),
+                        background: isActive ? '#FBF0C8' : '#FFFFFF',
+                        borderRadius: 999, padding: '6px 13px', fontSize: 12, fontWeight: isActive ? 700 : 500,
+                        color: '#1D1D1D', cursor: isActive ? 'default' : 'pointer', opacity: isBusy ? 0.6 : 1,
+                      }}
+                    >
+                      {isBusy ? 'Bezig…' : `Versie ${i + 1}${isActive ? ' ✓' : ''}`}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      {!generating && !hasGenerated && !genError && (
         <div style={{ margin: '16px 0 4px', fontSize: 12.5, color: '#8C8880' }}>
           Nog geen scriptvoorstel. Vul eerst product/dienst, USP of je kernboodschap in op de brief.
           <button type="button" disabled={!canGenerate} onClick={generate} style={{ display: 'block', marginTop: 8, border: 'none', background: 'transparent', color: '#383209', fontWeight: 600, fontSize: 12.5, textDecoration: 'underline', cursor: canGenerate ? 'pointer' : 'not-allowed', padding: 0 }}>
@@ -389,6 +496,12 @@ export default function ScriptPage({ params }) {
       <p style={{ marginTop: 20, fontSize: 11.5, color: '#8C8880', lineHeight: 1.5 }}>
         Je krijgt na deze stap nog één moment om het script bij te stellen, voordat de opname start.
       </p>
+
+      <style>{`
+        @keyframes tfa-script-spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </StepShell>
   );
 }
